@@ -1,0 +1,5 @@
+libkorad.so
+*.o
+*.swp
+example/example
+*.log
