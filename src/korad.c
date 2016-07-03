@@ -252,12 +252,6 @@ korad_device_find(KoradDevice **d)
     }
     sp_free_port_list(port_list);
 
-    printf("Port-Name: %s\n", sp_get_port_name(korad_port));
-
-    FILE *f = fopen("C:\\Users\\Fabian\\tmp.dat", "wb");
-    fwrite(korad_port, 1, 1024, f);
-    fclose(f);
-
     if (known_device == NULL)
     {
         *d = NULL;
