@@ -151,7 +151,7 @@ korad_device_find(KoradDevice **d)
         {
             int usb_vid, usb_pid;
             sp_get_port_usb_vid_pid(*port_list_item, &usb_vid, &usb_pid);
-            printf("USB-Device: Port-Name: %s, Manufacturer: %s, Product: %s, Serial: %s, ID: %04x:%04x\n", 
+            printf("USB-Device: Port-Name: %s, Manufacturer: %s, Product: %s, Serial: %s, ID: %04x:%04x\n",
                 sp_get_port_name(*port_list_item),
                 sp_get_port_usb_manufacturer(*port_list_item),
                 sp_get_port_usb_product(*port_list_item),
@@ -273,7 +273,7 @@ static KORAD_ERROR
 korad_device_read_command(KoradDevice *d)
 {
     int bytes = sp_blocking_read(
-        d->port, 
+        d->port,
         d->buffer + d->buffer_pos,
         d->queue->settings->return_length,
         500);

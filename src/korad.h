@@ -31,7 +31,7 @@
     #define KORAD_LOCAL
 #endif
 
-typedef struct 
+typedef struct
 {
   const char *name;
   int vendor_id;
@@ -140,8 +140,8 @@ KORAD_API void korad_send(KoradDevice *d, korad_result_handler callback, const c
 #define korad_get_actual_current(d, cb)      korad_send((d), (cb), "IOUT1?")
 
 #define korad_output(d, f)                   korad_send((d), NULL, "OUT", (f))
-#define korad_output_on(d)                   korad_send((d), NULL, "OUT", 1)
-#define korad_output_off(d)                  korad_send((d), NULL, "OUT", 0)
+#define korad_output_on(d)                   korad_output((d), 1)
+#define korad_output_off(d)                  korad_output((d), 0)
 
 #define korad_over_voltage_protection(d, f)  korad_send((d), NULL, "OVP", (f))
 #define korad_over_voltage_protection_on(d)  korad_over_voltage_protection((d), 1)
@@ -151,13 +151,13 @@ KORAD_API void korad_send(KoradDevice *d, korad_result_handler callback, const c
 #define korad_ovp_off(d)                     korad_over_voltage_protection_off((d))
 
 #define korad_over_current_protection(d, f)  korad_send((d), NULL, "OCP", (f))
-#define korad_over_current_protection_on(d)  korad_send((d), NULL, "OCP", 1)
-#define korad_over_current_protection_off(d) korad_send((d), NULL, "OCP", 0)
+#define korad_over_current_protection_on(d)  korad_over_current_protection((d), 1)
+#define korad_over_current_protection_off(d) korad_over_current_protection((d), 0)
 #define korad_ocp(d, f)                      korad_over_current_protection((d), (f))
 #define korad_ocp_on(d)                      korad_over_current_protection_on((d))
 #define korad_ocp_off(d)                     korad_over_current_protection_off((d))
 
-#define korad_save(d, p) korad_send((d), NULL, "SAV", (p))
-#define korad_recall(d, p) korad_send((d), NULL, "RCL", (p))
+#define korad_save(d, p)                     korad_send((d), NULL, "SAV", (p))
+#define korad_recall(d, p)                   korad_send((d), NULL, "RCL", (p))
 
 #endif // KORAD_H_
