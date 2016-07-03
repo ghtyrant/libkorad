@@ -6,7 +6,7 @@
 
 #include "korad.h"
 
-const struct KoradKnownDevice KORAD_KNOWN_DEVICES[] = {
+const KoradKnownDevice KORAD_KNOWN_DEVICES[] = {
     { "KORADKA3005PV2.0", 0x0416, 0x5011 },
     { NULL, 0, 0}
 };
@@ -44,7 +44,7 @@ korad_find_command_settings(const char* command)
 }
 
 static KORAD_ERROR
-korad_command_new(KoradCommand **cmd, korad_result_handler handler, const char* command, ...)
+korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, const char* command, va_list argptr)
 {
     const KoradCommandSettings *s = korad_find_command_settings(command);
 
@@ -59,16 +59,24 @@ korad_command_new(KoradCommand **cmd, korad_result_handler handler, const char* 
     c->settings = s;
     c->handler = handler;
 
-    va_list argptr;
-    va_start(argptr, command);
-
     c->command = malloc(50 * sizeof(char));
     vsnprintf(c->command, 50, c->settings->format_string == NULL ? c->settings->command : c->settings->format_string, argptr);
-    printf("Command: %s, Len: %d\n", c->command, strlen(c->command));
-    va_end(argptr);
+
+    printf("Command: %s\n", c->command);
 
     *cmd = c;
     return KORAD_OK;
+}
+
+static KORAD_ERROR
+korad_command_new(KoradCommand **cmd, korad_result_handler handler, const char* command, ...)
+{
+    va_list argptr;
+    va_start(argptr, command);
+    KORAD_ERROR ret = korad_command_new_va(cmd, handler, command, argptr);
+    va_end(argptr);
+
+    return ret;
 }
 
 static void
@@ -122,16 +130,103 @@ korad_device_send_command(KoradDevice *d, KoradCommand *c)
     return KORAD_OK;
 }
 
-static KoradKnownDevice *
+static const KoradKnownDevice *
 korad_find_known_device_by_usb_id(int usb_vid, int usb_pid)
 {
     for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name; d++)
     {
-        if (d->vendor_id = usb_vid && d->product_id = usb_pid)
-            return s;
+        if (d->vendor_id == usb_vid && d->product_id == usb_pid)
+            return d;
     }
 
     return NULL;
+}
+
+const KoradKnownDevice *
+korad_verify_device(struct sp_port *port)
+{
+    const KoradKnownDevice *device = NULL;
+
+    printf("Checking port '%s' ...\n", sp_get_port_name(port));
+
+    if (sp_get_port_transport(port) == SP_TRANSPORT_USB)
+    {
+        int usb_vid, usb_pid;
+        sp_get_port_usb_vid_pid(port, &usb_vid, &usb_pid);
+        printf("USB-Device: Port-Name: %s, Manufacturer: %s, Product: %s, Serial: %s, ID: %04x:%04x\n",
+            sp_get_port_name(port),
+            sp_get_port_usb_manufacturer(port),
+            sp_get_port_usb_product(port),
+            sp_get_port_usb_serial(port),
+            usb_vid,
+            usb_pid);
+
+        device = korad_find_known_device_by_usb_id(usb_vid, usb_pid);
+    }
+
+    unsigned int max_name_length = 0;
+
+    if (device != NULL)
+        max_name_length = strlen(device->name);
+    else
+    {
+        for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name != NULL; d++)
+            if (strlen(d->name) > max_name_length)
+                max_name_length = strlen(d->name);
+    }
+
+    if (sp_open(port, SP_MODE_READ_WRITE) != SP_OK)
+        return NULL;
+
+    sp_set_flowcontrol(port, SP_FLOWCONTROL_XONXOFF);
+    sp_set_baudrate(port, 9600);
+    sp_set_bits(port, 8);
+    sp_set_parity(port, SP_PARITY_NONE);
+    sp_set_stopbits(port, 1);
+
+    const char buf[] = "*IDN?";
+
+    if (sp_blocking_write(port, buf, strlen(buf), 0) <= 0)
+        return NULL;
+
+    sp_drain(port);
+
+    char *in_buf = malloc((max_name_length + 1) * sizeof(char));
+    int bytes_total = 0;
+    for (int tries = 0; tries < 100 && bytes_total < max_name_length + 1; tries++)
+        bytes_total += sp_blocking_read(port, in_buf + bytes_total, max_name_length + 1, 40);
+
+    in_buf[bytes_total] = 0;
+
+    if (bytes_total > 0)
+    {
+        // If we already found a device via USB Vendor/Product ID, check if the name fits
+        // TODO Different devices could share the same USB ids? This would lead us to reject a valid device
+        if (device != NULL)
+        {
+            if (strncmp(device->name, in_buf, bytes_total) != 0)
+                device = NULL;
+        }
+        // Otherwise, compare name to our database
+        else
+        {
+            for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name != NULL && device == NULL; d++)
+            {
+                if (strncmp(d->name, in_buf, bytes_total) == 0)
+                {
+                    printf("STRNCMP() YES!\n");
+                    device = d;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!device)
+        sp_close(port);
+
+    free(in_buf);
+    return device;
 }
 
 KORAD_ERROR
@@ -144,88 +239,34 @@ korad_device_find(KoradDevice **d)
 
     struct sp_port* korad_port = malloc(sizeof(struct sp_port*));
     struct sp_port** port_list_item = port_list;
-    char found = 0;
-    while(*port_list_item)
+    const KoradKnownDevice *known_device = NULL;
+
+    while(*port_list_item && known_device == NULL)
     {
-        if (sp_get_port_transport(*port_list_item) == SP_TRANSPORT_USB)
-        {
-            int usb_vid, usb_pid;
-            sp_get_port_usb_vid_pid(*port_list_item, &usb_vid, &usb_pid);
-            printf("USB-Device: Port-Name: %s, Manufacturer: %s, Product: %s, Serial: %s, ID: %04x:%04x\n",
-                sp_get_port_name(*port_list_item),
-                sp_get_port_usb_manufacturer(*port_list_item),
-                sp_get_port_usb_product(*port_list_item),
-                sp_get_port_usb_serial(*port_list_item),
-                usb_vid,
-                usb_pid);
+        known_device = korad_verify_device(*port_list_item);
 
-            KoradKnownDevice *kd = korad_find_known_device_by_usb_id(usb_vid, usb_pid);
-
-            if (kd)
-            {
-                sp_copy_port(*port_list_item, &korad_port);
-                found = 1;
-                break;
-            }
-        }
+        if (known_device != NULL)
+            sp_copy_port(*port_list_item, &korad_port);
 
         port_list_item++;
     }
     sp_free_port_list(port_list);
 
-    if (found != 1)
+    printf("Port-Name: %s\n", sp_get_port_name(korad_port));
+
+    FILE *f = fopen("C:\\Users\\Fabian\\tmp.dat", "wb");
+    fwrite(korad_port, 1, 1024, f);
+    fclose(f);
+
+    if (known_device == NULL)
     {
         *d = NULL;
         return KORAD_NOT_FOUND;
     }
 
-    if (sp_open(korad_port, SP_MODE_READ_WRITE) != SP_OK)
-    {
-        sp_free_port(korad_port);
-        return KORAD_COMMUNCATION_ERROR;
-    }
-
-    sp_set_flowcontrol(korad_port, SP_FLOWCONTROL_XONXOFF);
-    sp_set_baudrate(korad_port, 9600);
-    sp_set_bits(korad_port, 8);
-    sp_set_parity(korad_port, SP_PARITY_NONE);
-    sp_set_stopbits(korad_port, 1);
-
-    const char buf[] = "*IDN?";
-    int written = sp_blocking_write(korad_port, buf, strlen(buf), 0);
-    printf("Wrote %d bytes to device!\n", written);
-    sp_drain(korad_port);
-
-    char in_buf[50];
-    int bytes_total = 0;
-    int tries = 0;
-    while(bytes_total < strlen(KORAD_KA3005PV20) + 1 || tries >= 100)
-    {
-        bytes_total += sp_blocking_read(korad_port, in_buf + bytes_total, strlen(KORAD_KA3005PV20) + 1, 500);
-        tries++;
-    }
-    printf("Bytes read: %d\n", bytes_total);
-
-    if (bytes_total != strlen(KORAD_KA3005PV20) + 1)
-    {
-        sp_close(korad_port);
-        sp_free_port(korad_port);
-        return KORAD_COMMUNCATION_ERROR;
-    }
-
-    in_buf[bytes_total] = 0;
-
-    if (strncmp(in_buf, KORAD_KA3005PV20, strlen(KORAD_KA3005PV20)) != 0)
-    {
-        printf("Did not recognize a supported Korad device: '%s'\n", in_buf);
-        sp_close(korad_port);
-        sp_free_port(korad_port);
-        return -1;
-    }
-
     KoradDevice *device = calloc(1, sizeof(KoradDevice));
     device->port = korad_port;
-    device->buffer_pos = 0;
+    device->known_device = known_device;
 
     *d = device;
     return KORAD_OK;
@@ -302,8 +343,9 @@ korad_device_send_next(KoradDevice *d)
     KoradCommand *c = d->queue;
 
     int written = sp_blocking_write(d->port, c->command, strlen(c->command), 0);
+    printf("Running command '%s' (%d bytes) ... '%s'\n", c->command, written, sp_last_error_message());
     sp_drain(d->port);
-    printf("Running command '%s' (%d bytes) ...\n", c->command, written);
+
     c->is_sent = 1;
 
     // If we are not waiting for a result, pop this command off immediately
@@ -377,7 +419,7 @@ korad_send(KoradDevice *d, korad_result_handler callback, const char *command, .
     KoradCommand *cmd;
     va_list argptr;
     va_start(argptr, command);
-    korad_command_new(&cmd, callback, command, argptr);
+    korad_command_new_va(&cmd, callback, command, argptr);
     va_end(argptr);
 
     korad_device_send_command(d, cmd);

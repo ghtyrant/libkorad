@@ -29,4 +29,4 @@ callgrind: all
 	LD_LIBRARY_PATH=../ valgrind --tool=callgrind ./$(TARGET)
 
 clean:
-	rm $(TARGET) $(OBJECTS)
+	rm -rf $(TARGET) $(OBJECTS)

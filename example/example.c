@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include "korad.h"
+#include <korad.h>
 
 void
 tmp_handler(KoradDevice *d, KoradCommand *c)
@@ -16,6 +16,7 @@ main (int argc, char *argv[])
         return -1;
 
     printf("Found KORAD power supply unit!\n");
+    printf("Dev: %s\n", device->known_device->name);
 
     korad_set_voltage(device, 12.34);
 

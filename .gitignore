@@ -1,4 +1,7 @@
-libkorad.so
+*.so
+*.dll
+*.dylib
+*.exe
 *.o
 *.swp
 example/example

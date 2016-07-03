@@ -116,7 +116,7 @@ struct _KoradCommand
 struct _KoradDevice
 {
     struct sp_port *port;
-    unsigned int device_id;
+    const KoradKnownDevice *known_device;
     char quit;
     char buffer[1024];
     unsigned int buffer_pos;
