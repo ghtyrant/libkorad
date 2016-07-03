@@ -62,8 +62,6 @@ korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, const cha
     c->command = malloc(50 * sizeof(char));
     vsnprintf(c->command, 50, c->settings->format_string == NULL ? c->settings->command : c->settings->format_string, argptr);
 
-    printf("Command: %s\n", c->command);
-
     *cmd = c;
     return KORAD_OK;
 }
@@ -147,8 +145,6 @@ korad_verify_device(struct sp_port *port)
 {
     const KoradKnownDevice *device = NULL;
 
-    printf("Checking port '%s' ...\n", sp_get_port_name(port));
-
     if (sp_get_port_transport(port) == SP_TRANSPORT_USB)
     {
         int usb_vid, usb_pid;
@@ -191,7 +187,7 @@ korad_verify_device(struct sp_port *port)
 
     sp_drain(port);
 
-    char *in_buf = malloc((max_name_length + 1) * sizeof(char));
+    char *in_buf = malloc((max_name_length + 2) * sizeof(char));
     int bytes_total = 0;
     for (int tries = 0; tries < 100 && bytes_total < max_name_length + 1; tries++)
         bytes_total += sp_blocking_read(port, in_buf + bytes_total, max_name_length + 1, 40);
@@ -214,7 +210,6 @@ korad_verify_device(struct sp_port *port)
             {
                 if (strncmp(d->name, in_buf, bytes_total) == 0)
                 {
-                    printf("STRNCMP() YES!\n");
                     device = d;
                     break;
                 }
@@ -238,15 +233,19 @@ korad_device_find(KoradDevice **d)
         return KORAD_NOT_FOUND;
 
     struct sp_port* korad_port = malloc(sizeof(struct sp_port*));
-    struct sp_port** port_list_item = port_list;
+    const struct sp_port** port_list_item = port_list;
     const KoradKnownDevice *known_device = NULL;
 
     while(*port_list_item && known_device == NULL)
     {
-        known_device = korad_verify_device(*port_list_item);
+        // korad_verify_device will connect to the port to check if this is a device we are supporting
+        // Copying the port will close the connection, so we will copy beforehand and delete in case
+        // it's a different device - not that clean.
+        sp_copy_port(*port_list_item, &korad_port);
+        known_device = korad_verify_device(korad_port);
 
-        if (known_device != NULL)
-            sp_copy_port(*port_list_item, &korad_port);
+        if (known_device == NULL)
+            sp_free_port(korad_port);
 
         port_list_item++;
     }
@@ -336,8 +335,7 @@ korad_device_send_next(KoradDevice *d)
 {
     KoradCommand *c = d->queue;
 
-    int written = sp_blocking_write(d->port, c->command, strlen(c->command), 0);
-    printf("Running command '%s' (%d bytes) ... '%s'\n", c->command, written, sp_last_error_message());
+    sp_blocking_write(d->port, c->command, strlen(c->command), 0);
     sp_drain(d->port);
 
     c->is_sent = 1;
