@@ -128,50 +128,20 @@ korad_device_send_command(KoradDevice *d, KoradCommand *c)
     return KORAD_OK;
 }
 
-static const KoradKnownDevice *
-korad_find_known_device_by_usb_id(int usb_vid, int usb_pid)
-{
-    for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name; d++)
-    {
-        if (d->vendor_id == usb_vid && d->product_id == usb_pid)
-            return d;
-    }
-
-    return NULL;
-}
-
 const KoradKnownDevice *
 korad_verify_device(struct sp_port *port)
 {
     const KoradKnownDevice *device = NULL;
 
-    if (sp_get_port_transport(port) == SP_TRANSPORT_USB)
-    {
-        int usb_vid, usb_pid;
-        sp_get_port_usb_vid_pid(port, &usb_vid, &usb_pid);
-        printf("USB-Device: Port-Name: %s, Manufacturer: %s, Product: %s, Serial: %s, ID: %04x:%04x\n",
-            sp_get_port_name(port),
-            sp_get_port_usb_manufacturer(port),
-            sp_get_port_usb_product(port),
-            sp_get_port_usb_serial(port),
-            usb_vid,
-            usb_pid);
-
-        device = korad_find_known_device_by_usb_id(usb_vid, usb_pid);
-    }
+    printf("Checking port %s\n", sp_get_port_name(port));
 
     unsigned int max_name_length = 0;
 
-    if (device != NULL)
-        max_name_length = strlen(device->name);
-    else
-    {
-        for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name != NULL; d++)
-            if (strlen(d->name) > max_name_length)
-                max_name_length = strlen(d->name);
-    }
+    for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name != NULL; d++)
+        if (strlen(d->name) > max_name_length)
+            max_name_length = strlen(d->name);
 
-    if (sp_open(port, SP_MODE_READ_WRITE) != SP_OK)
+    if (sp_open(port, SP_MODE_READ|SP_MODE_WRITE) != SP_OK)
         return NULL;
 
     sp_set_flowcontrol(port, SP_FLOWCONTROL_XONXOFF);
@@ -182,7 +152,7 @@ korad_verify_device(struct sp_port *port)
 
     const char buf[] = "*IDN?";
 
-    if (sp_blocking_write(port, buf, strlen(buf), 0) <= 0)
+    if (sp_blocking_write(port, buf, strlen(buf), 800) <= 0)
         return NULL;
 
     sp_drain(port);
