@@ -142,7 +142,10 @@ korad_verify_device(struct sp_port *port)
             max_name_length = strlen(d->name);
 
     if (sp_open(port, SP_MODE_READ|SP_MODE_WRITE) != SP_OK)
+    {
+        printf("Error opening port '%s'\n", sp_get_port_name(port));
         return NULL;
+    }
 
     sp_set_flowcontrol(port, SP_FLOWCONTROL_XONXOFF);
     sp_set_baudrate(port, 9600);
@@ -178,6 +181,7 @@ korad_verify_device(struct sp_port *port)
         {
             for (const KoradKnownDevice *d = KORAD_KNOWN_DEVICES; d->name != NULL && device == NULL; d++)
             {
+                printf("Comparing device in database '%s' with response '%s' ...\n", d->name, in_buf);
                 if (strncmp(d->name, in_buf, bytes_total) == 0)
                 {
                     device = d;
@@ -230,6 +234,7 @@ korad_device_find(KoradDevice **d)
     KoradDevice *device = calloc(1, sizeof(KoradDevice));
     device->port = korad_port;
     device->known_device = known_device;
+    pthread_mutex_init(&device->queue_lock, NULL);
 
     *d = device;
     return KORAD_OK;
@@ -247,6 +252,8 @@ korad_device_try_parse_buffer(KoradDevice *d)
     if (d->buffer_pos < d->queue->settings->return_length)
         return KORAD_READ_AGAIN;
 
+
+    pthread_mutex_lock(&d->queue_lock);
     KoradCommand *c = d->queue;
     korad_command_set_result(d->queue, d->buffer);
 
@@ -269,6 +276,8 @@ korad_device_try_parse_buffer(KoradDevice *d)
         c->handler(d, c);
 
     korad_command_free(c);
+
+    pthread_mutex_unlock(&d->queue_lock);
 
     return KORAD_OK;
 }
@@ -303,9 +312,18 @@ korad_device_read_command(KoradDevice *d)
 static void
 korad_device_send_next(KoradDevice *d)
 {
+    pthread_mutex_lock(&d->queue_lock);
+
     KoradCommand *c = d->queue;
 
-    sp_blocking_write(d->port, c->command, strlen(c->command), 0);
+    int written = sp_blocking_write(d->port, c->command, strlen(c->command), 0);
+
+    if (written < 0)
+    {
+        enum sp_return error = (enum sp_return)written;
+        printf("Error writing to device: %d\n", written);
+    }
+
     sp_drain(d->port);
 
     c->is_sent = 1;
@@ -320,6 +338,8 @@ korad_device_send_next(KoradDevice *d)
 
         korad_command_free(c);
     }
+
+    pthread_mutex_unlock(&d->queue_lock);
 }
 
 void
@@ -330,14 +350,9 @@ korad_run(KoradDevice *d)
 
     sp_add_port_events(events, d->port, SP_EVENT_RX_READY|SP_EVENT_RX_READY|SP_EVENT_ERROR);
 
-    int event_count = 0;
     while(d->quit == 0)
     {
         sp_wait(events, 500);
-        event_count++;
-
-        if (event_count >= 20)
-            break;
 
         if (d->queue == NULL)
             continue;

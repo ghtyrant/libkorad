@@ -2,7 +2,7 @@ CC := gcc
 LD := $(CC)
 
 CFLAGS  := -Wall -std=c11 -g $(GLIB_CFLAGS) -I../src/
-LDFLAGS := -L../ -lkorad
+LDFLAGS := -L../ -lkorad -lpthread
 
 TARGET  := example
 SOURCES := $(wildcard *.c)

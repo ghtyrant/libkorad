@@ -1,10 +1,19 @@
 #include <stdio.h>
 #include <korad.h>
+#include <unistd.h>
+#include <pthread.h>
 
 void
 tmp_handler(KoradDevice *d, KoradCommand *c)
 {
     //printf("Result is: %s\n", c->result);
+}
+
+void *
+do_run(void *data)
+{
+    KoradDevice *device = (KoradDevice*) data;
+    korad_run(device);
 }
 
 int
@@ -20,8 +29,27 @@ main (int argc, char *argv[])
 
     korad_set_voltage(device, 12.34);
 
-    korad_run(device);
+    pthread_t t;
+    pthread_create(&t, NULL, do_run, device);
 
+    printf("Before sleep!\n");
+    sleep(2);
+    printf("After sleep!\n");
+
+    int toggle = 0;
+
+    for (int i = 0; i < 6; ++i)
+    {
+        toggle = 1 - toggle;
+        printf("Before call ...\n");
+        korad_ovp(device, toggle);
+        printf("After call ...\n");
+        sleep(2);
+    }
+
+    korad_device_stop(device);
+
+    pthread_join(t, NULL);
     korad_device_free(device);
 
     return 0;

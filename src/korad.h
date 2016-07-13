@@ -1,6 +1,8 @@
 #ifndef KORAD_H_
 #define KORAD_H_
 
+#include <pthread.h>
+
 /* Library symbol visibilty magic */
 #if defined _WIN32 || defined __CYGWIN__
   #define KORAD_DLL_IMPORT __declspec(dllimport)
@@ -120,6 +122,8 @@ struct _KoradDevice
     char quit;
     char buffer[1024];
     unsigned int buffer_pos;
+
+    pthread_mutex_t queue_lock;
     KoradCommand *queue;
     KoradCommand *queue_tail;
 };
