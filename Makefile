@@ -40,4 +40,8 @@ clean:
 	rm -rf $(TARGET) $(OBJECTS)
 	make -C example/ clean
 
+install:
+	install -p $TARGET /usr/local/lib/
+	install -p src/korad.h /usr/local/include/
+
 .PHONY: example
