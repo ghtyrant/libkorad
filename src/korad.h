@@ -60,9 +60,11 @@ typedef enum
     KORAD_COMMAND_STATUS,
     KORAD_COMMAND_VOLTAGE_USER_GET,
     KORAD_COMMAND_VOLTAGE_USER_SET,
+    KORAD_COMMAND_VOLTAGE_USER_SET_STR,
     KORAD_COMMAND_VOLTAGE_ACTUAL_GET,
     KORAD_COMMAND_CURRENT_USER_GET,
     KORAD_COMMAND_CURRENT_USER_SET,
+    KORAD_COMMAND_CURRENT_USER_SET_STR,
     KORAD_COMMAND_CURRENT_ACTUAL_GET,
     KORAD_COMMAND_OUTPUT,
     KORAD_COMMAND_OVP,
@@ -103,7 +105,7 @@ typedef struct
 
 typedef struct _KoradCommand KoradCommand;
 typedef struct _KoradDevice KoradDevice;
-typedef void (*korad_result_handler)(KoradDevice *device, KoradCommand* command);
+typedef void (*korad_result_handler)(KoradDevice *device, KoradCommand* command, void *user_data);
 
 struct _KoradCommand
 {
@@ -113,6 +115,7 @@ struct _KoradCommand
     const KoradCommandSettings *settings;
     struct _KoradCommand *next;
     korad_result_handler handler;
+    void *user_data;
 };
 
 struct _KoradDevice
@@ -132,36 +135,37 @@ KORAD_API KORAD_ERROR korad_device_find(KoradDevice **d);
 KORAD_API void korad_run(KoradDevice *d);
 KORAD_API void korad_device_stop(KoradDevice *d);
 KORAD_API void korad_device_free(KoradDevice *d);
-KORAD_API void korad_send(KoradDevice *d, korad_result_handler callback, const char *command, ...);
+KORAD_API void korad_send(KoradDevice *d, korad_result_handler callback, void *user_data, const char *command, ...);
 
-#define korad_set_voltage(d, v)              korad_send((d), NULL, "VSET1:", (v))
-#define korad_set_current(d, c)              korad_send((d), NULL, "ISET1:", (c))
+#define korad_set_voltage(d, v)              korad_send((d), NULL, NULL, "VSET1:", (v))
+#define korad_set_voltage_str(d, v)          korad_send((d), NULL, NULL, "VSET1S:", (v))
+#define korad_set_current(d, c)              korad_send((d), NULL, NULL, "ISET1:", (c))
 
-#define korad_get_maximum_voltage(d, cb)     korad_send((d), (cb), "VSET1?")
-#define korad_get_maximum_current(d, cb)     korad_send((d), (cb), "ISET1?")
+#define korad_get_maximum_voltage(d, cb, u)  korad_send((d), (cb), (u), "VSET1?")
+#define korad_get_maximum_current(d, cb, u)  korad_send((d), (cb), (u), "ISET1?")
 
-#define korad_get_actual_voltage(d, cb)      korad_send((d), (cb), "VOUT1?")
-#define korad_get_actual_current(d, cb)      korad_send((d), (cb), "IOUT1?")
+#define korad_get_actual_voltage(d, cb, u)   korad_send((d), (cb), (u), "VOUT1?")
+#define korad_get_actual_current(d, cb, u)   korad_send((d), (cb), (u), "IOUT1?")
 
-#define korad_output(d, f)                   korad_send((d), NULL, "OUT", (f))
+#define korad_output(d, f)                   korad_send((d), NULL, NULL, "OUT", (f))
 #define korad_output_on(d)                   korad_output((d), 1)
 #define korad_output_off(d)                  korad_output((d), 0)
 
-#define korad_over_voltage_protection(d, f)  korad_send((d), NULL, "OVP", (f))
+#define korad_over_voltage_protection(d, f)  korad_send((d), NULL, NULL, "OVP", (f))
 #define korad_over_voltage_protection_on(d)  korad_over_voltage_protection((d), 1)
 #define korad_over_voltage_protection_off(d) korad_over_voltage_protection((d), 0)
 #define korad_ovp(d, f)                      korad_over_voltage_protection((d), (f))
 #define korad_ovp_on(d)                      korad_over_voltage_protection_on((d))
 #define korad_ovp_off(d)                     korad_over_voltage_protection_off((d))
 
-#define korad_over_current_protection(d, f)  korad_send((d), NULL, "OCP", (f))
+#define korad_over_current_protection(d, f)  korad_send((d), NULL, NULL, "OCP", (f))
 #define korad_over_current_protection_on(d)  korad_over_current_protection((d), 1)
 #define korad_over_current_protection_off(d) korad_over_current_protection((d), 0)
 #define korad_ocp(d, f)                      korad_over_current_protection((d), (f))
 #define korad_ocp_on(d)                      korad_over_current_protection_on((d))
 #define korad_ocp_off(d)                     korad_over_current_protection_off((d))
 
-#define korad_save(d, p)                     korad_send((d), NULL, "SAV", (p))
-#define korad_recall(d, p)                   korad_send((d), NULL, "RCL", (p))
+#define korad_save(d, p)                     korad_send((d), NULL, NULL, "SAV", (p))
+#define korad_recall(d, p)                   korad_send((d), NULL, NULL, "RCL", (p))
 
 #endif // KORAD_H_

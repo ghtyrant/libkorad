@@ -12,20 +12,22 @@ const KoradKnownDevice KORAD_KNOWN_DEVICES[] = {
 };
 
 const KoradCommandSettings KORAD_COMMAND_SETTINGS[] = {
-    { KORAD_COMMAND_IDN,                "*IDN?",   NULL,           1, 50, KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_STATUS,             "STATUS?", NULL,           1, 1,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_VOLTAGE_USER_GET,   "VSET1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
-    { KORAD_COMMAND_VOLTAGE_USER_SET,   "VSET1:",  "VSET1:%02.2f", 0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_VOLTAGE_ACTUAL_GET, "VOUT1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
-    { KORAD_COMMAND_CURRENT_USER_GET,   "ISET1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
-    { KORAD_COMMAND_CURRENT_USER_SET,   "ISET1:",  "ISET1:%.3f",   0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_CURRENT_ACTUAL_GET, "IOUT1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
-    { KORAD_COMMAND_OUTPUT,             "OUT",     "OUT%u",        0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_OVP,                "OVP",     "OVP%u",        0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_OCP,                "OCP",     "OCP%u",        0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_TRACK,              "TRACK",   "TRACK%u",      0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_RECALL,             "RCL",     "RCL%u",        0, 0,  KORAD_CONVERT_NONE  },
-    { KORAD_COMMAND_SAVE,               "SAV",     "SAV%u",        0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_IDN,                  "*IDN?",   NULL,           1, 50, KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_STATUS,               "STATUS?", NULL,           1, 1,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_VOLTAGE_USER_GET,     "VSET1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
+    { KORAD_COMMAND_VOLTAGE_USER_SET,     "VSET1:",  "VSET1:%05.2f", 0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_VOLTAGE_USER_SET_STR, "VSET1S:", "VSET1:%s",     0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_VOLTAGE_ACTUAL_GET,   "VOUT1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
+    { KORAD_COMMAND_CURRENT_USER_GET,     "ISET1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
+    { KORAD_COMMAND_CURRENT_USER_SET,     "ISET1:",  "ISET1:%05.3f", 0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_CURRENT_USER_SET_STR, "ISET1S:", "ISET1:%s",     0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_CURRENT_ACTUAL_GET,   "IOUT1?",  NULL,           1, 5,  KORAD_CONVERT_FLOAT },
+    { KORAD_COMMAND_OUTPUT,               "OUT",     "OUT%u",        0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_OVP,                  "OVP",     "OVP%u",        0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_OCP,                  "OCP",     "OCP%u",        0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_TRACK,                "TRACK",   "TRACK%u",      0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_RECALL,               "RCL",     "RCL%u",        0, 0,  KORAD_CONVERT_NONE  },
+    { KORAD_COMMAND_SAVE,                 "SAV",     "SAV%u",        0, 0,  KORAD_CONVERT_NONE  },
 
     // Termination
     {0, NULL, NULL, 0, 0},
@@ -44,7 +46,7 @@ korad_find_command_settings(const char* command)
 }
 
 static KORAD_ERROR
-korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, const char* command, va_list argptr)
+korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, void *user_data, const char* command, va_list argptr)
 {
     const KoradCommandSettings *s = korad_find_command_settings(command);
 
@@ -58,6 +60,7 @@ korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, const cha
     KoradCommand *c = calloc(1, sizeof(KoradCommand));
     c->settings = s;
     c->handler = handler;
+    c->user_data = user_data;
 
     c->command = malloc(50 * sizeof(char));
     vsnprintf(c->command, 50, c->settings->format_string == NULL ? c->settings->command : c->settings->format_string, argptr);
@@ -67,11 +70,11 @@ korad_command_new_va(KoradCommand **cmd, korad_result_handler handler, const cha
 }
 
 static KORAD_ERROR
-korad_command_new(KoradCommand **cmd, korad_result_handler handler, const char* command, ...)
+korad_command_new(KoradCommand **cmd, korad_result_handler handler, void *user_data, const char* command, ...)
 {
     va_list argptr;
     va_start(argptr, command);
-    KORAD_ERROR ret = korad_command_new_va(cmd, handler, command, argptr);
+    KORAD_ERROR ret = korad_command_new_va(cmd, handler, user_data, command, argptr);
     va_end(argptr);
 
     return ret;
@@ -272,8 +275,12 @@ korad_device_try_parse_buffer(KoradDevice *d)
     if (d->queue == NULL)
         d->queue_tail = NULL;
 
+    printf("Trying to call handler ...\n");
     if (c->handler)
-        c->handler(d, c);
+    {
+        printf("Calling handler ...\n");
+        c->handler(d, c, c->user_data);
+    }
 
     korad_command_free(c);
 
@@ -316,13 +323,11 @@ korad_device_send_next(KoradDevice *d)
 
     KoradCommand *c = d->queue;
 
+    printf("Sending '%s'.\n", c->command);
     int written = sp_blocking_write(d->port, c->command, strlen(c->command), 0);
 
     if (written < 0)
-    {
-        enum sp_return error = (enum sp_return)written;
         printf("Error writing to device: %d\n", written);
-    }
 
     sp_drain(d->port);
 
@@ -391,12 +396,13 @@ korad_device_free(KoradDevice *d)
 }
 
 void
-korad_send(KoradDevice *d, korad_result_handler callback, const char *command, ...)
+korad_send(KoradDevice *d, korad_result_handler callback, void *user_data, const char *command, ...)
 {
+    printf("Preparing to send '%s' ...\n", command);
     KoradCommand *cmd;
     va_list argptr;
     va_start(argptr, command);
-    korad_command_new_va(&cmd, callback, command, argptr);
+    korad_command_new_va(&cmd, callback, user_data, command, argptr);
     va_end(argptr);
 
     korad_device_send_command(d, cmd);
